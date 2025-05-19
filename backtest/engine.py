@@ -369,25 +369,78 @@ class BacktestEngine:
         trades = pd.DataFrame(self.trades) if self.trades else pd.DataFrame()
 
         if not trades.empty:
-            # 计算每笔交易的收益
-            trades['pnl'] = trades.apply(
-                lambda x: (x['revenue'] - x.get('cost', 0)) / x.get('cost', 1) * 100
-                if x['type'] == 'sell' else 0,
-                axis=1
-            )
+            # 将交易按类型分组
+            buy_trades = trades[trades['type'] == 'buy']
+            sell_trades = trades[trades['type'] == 'sell']
 
-            # 计算胜率
-            win_trades = trades[trades['pnl'] > 0]
-            loss_trades = trades[trades['pnl'] <= 0]
-            win_rate = len(win_trades) / len(trades) * 100 if len(trades) > 0 else 0
+            # 确保有完整的交易对
+            if len(buy_trades) > 0 and len(sell_trades) > 0:
+                # 计算完整交易周期的盈亏
+                # 注意：这里简化处理，假设买卖交易是按顺序配对的
+                trade_pairs = []
+                buy_idx = 0
+                sell_idx = 0
 
-            # 计算平均盈亏
-            avg_win = win_trades['pnl'].mean() if not win_trades.empty else 0
-            avg_loss = loss_trades['pnl'].mean() if not loss_trades.empty else 0
+                # 按时间排序
+                buy_trades = buy_trades.sort_values('timestamp')
+                sell_trades = sell_trades.sort_values('timestamp')
 
-            # 计算盈亏比
-            profit_factor = abs(win_trades['pnl'].sum() / loss_trades['pnl'].sum()) \
-                if not loss_trades.empty and loss_trades['pnl'].sum() != 0 else float('inf')
+                # 匹配交易对
+                while buy_idx < len(buy_trades) and sell_idx < len(sell_trades):
+                    buy_trade = buy_trades.iloc[buy_idx]
+                    sell_trade = sell_trades.iloc[sell_idx]
+
+                    # 确保卖出在买入之后
+                    if sell_trade['timestamp'] > buy_trade['timestamp']:
+                        # 计算盈亏
+                        cost = buy_trade.get('cost', 0)
+                        revenue = sell_trade.get('revenue', 0)
+                        pnl_pct = (revenue - cost) / cost * 100 if cost > 0 else 0
+
+                        trade_pairs.append({
+                            'buy_time': buy_trade['datetime'],
+                            'sell_time': sell_trade['datetime'],
+                            'buy_price': buy_trade['price'],
+                            'sell_price': sell_trade['price'],
+                            'size': buy_trade['size'],
+                            'cost': cost,
+                            'revenue': revenue,
+                            'pnl': revenue - cost,
+                            'pnl_pct': pnl_pct
+                        })
+
+                        buy_idx += 1
+                        sell_idx += 1
+                    else:
+                        # 如果卖出在买入之前，跳过这个卖出
+                        sell_idx += 1
+
+                # 转换为DataFrame
+                trade_pairs_df = pd.DataFrame(trade_pairs) if trade_pairs else pd.DataFrame()
+
+                if not trade_pairs_df.empty:
+                    # 计算胜率
+                    win_trades = trade_pairs_df[trade_pairs_df['pnl'] > 0]
+                    loss_trades = trade_pairs_df[trade_pairs_df['pnl'] <= 0]
+                    win_rate = len(win_trades) / len(trade_pairs_df) * 100 if len(trade_pairs_df) > 0 else 0
+
+                    # 计算平均盈亏
+                    avg_win = win_trades['pnl_pct'].mean() if not win_trades.empty else 0
+                    avg_loss = loss_trades['pnl_pct'].mean() if not loss_trades.empty else 0
+
+                    # 计算盈亏比
+                    profit_factor = abs(win_trades['pnl'].sum() / loss_trades['pnl'].sum()) \
+                        if not loss_trades.empty and loss_trades['pnl'].sum() != 0 else float('inf')
+                else:
+                    win_rate = 0
+                    avg_win = 0
+                    avg_loss = 0
+                    profit_factor = 0
+            else:
+                win_rate = 0
+                avg_win = 0
+                avg_loss = 0
+                profit_factor = 0
         else:
             win_rate = 0
             avg_win = 0
