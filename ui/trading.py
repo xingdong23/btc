@@ -22,12 +22,14 @@ from strategies.base import StrategyBase
 from strategies.ma_crossover import MovingAverageCrossover
 from strategies.rsi import RSIStrategy
 from strategies.bollinger_bands import BollingerBandsStrategy
+from strategies.grid_trading import GateioGridTrading
 
 # 策略映射
 STRATEGY_MAP = {
     'ma_crossover': MovingAverageCrossover,
     'rsi': RSIStrategy,
-    'bollinger_bands': BollingerBandsStrategy
+    'bollinger_bands': BollingerBandsStrategy,
+    'grid_trading': GateioGridTrading
 }
 
 
@@ -73,31 +75,180 @@ def render_trading_page():
     param_cols = st.columns(3)
     strategy_params = {}
 
-    # 动态生成策略参数输入框
-    for i, (param_name, param_value) in enumerate(default_params.items()):
-        with param_cols[i % 3]:
-            if isinstance(param_value, bool):
-                strategy_params[param_name] = st.checkbox(
-                    param_name,
-                    value=param_value
-                )
-            elif isinstance(param_value, int):
-                strategy_params[param_name] = st.number_input(
-                    param_name,
-                    value=param_value,
-                    step=1
-                )
-            elif isinstance(param_value, float):
-                strategy_params[param_name] = st.number_input(
-                    param_name,
-                    value=param_value,
-                    format="%.4f"
+    # 网格交易策略的特殊处理
+    if strategy_name == 'grid_trading':
+        # 网格交易策略的参数设置
+        st.info("网格交易策略在预设的价格区间内，通过在多个网格点上自动进行低买高卖，捕捉小幅价格波动以获取利润。")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            strategy_params['symbol'] = st.text_input(
+                "symbol",
+                value=default_params.get('symbol', 'BTC_USDT'),
+                help="交易对，例如 BTC_USDT (Gate.io 现货格式)"
+            )
+
+            strategy_params['upper_price'] = st.number_input(
+                "upper_price",
+                value=default_params.get('upper_price', 70000.0),
+                format="%.2f",
+                help="网格区间的价格上限"
+            )
+
+            strategy_params['lower_price'] = st.number_input(
+                "lower_price",
+                value=default_params.get('lower_price', 60000.0),
+                format="%.2f",
+                help="网格区间的价格下限"
+            )
+
+            strategy_params['grid_num'] = st.number_input(
+                "grid_num",
+                value=default_params.get('grid_num', 10),
+                min_value=2,
+                step=1,
+                help="网格线的数量"
+            )
+
+        with col2:
+            strategy_params['order_amount_base'] = st.number_input(
+                "order_amount_base",
+                value=default_params.get('order_amount_base', 0.001),
+                format="%.6f",
+                help="每个网格订单希望交易的基础货币数量"
+            )
+
+            strategy_params['max_initial_orders_side'] = st.number_input(
+                "max_initial_orders_side",
+                value=default_params.get('max_initial_orders_side', 5),
+                min_value=0,
+                step=1,
+                help="策略启动时，在当前市场价格的单侧最多预先挂出的网格订单数量"
+            )
+
+            strategy_params['check_interval_seconds'] = st.number_input(
+                "check_interval_seconds",
+                value=default_params.get('check_interval_seconds', 10),
+                min_value=1,
+                step=1,
+                help="策略主循环的执行间隔时间（秒）"
+            )
+
+        # 可选的全局止损/止盈设置
+        st.subheader("全局止损/止盈设置（可选）")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            use_global_stop_loss = st.checkbox(
+                "启用全局止损",
+                value=False
+            )
+
+            if use_global_stop_loss:
+                strategy_params['global_stop_loss_price'] = st.number_input(
+                    "global_stop_loss_price",
+                    value=default_params.get('lower_price', 60000.0) * 0.95,
+                    format="%.2f",
+                    help="全局止损价格"
                 )
             else:
-                strategy_params[param_name] = st.text_input(
-                    param_name,
-                    value=str(param_value)
+                strategy_params['global_stop_loss_price'] = None
+
+        with col2:
+            use_global_take_profit = st.checkbox(
+                "启用全局止盈",
+                value=False
+            )
+
+            if use_global_take_profit:
+                strategy_params['global_take_profit_price'] = st.number_input(
+                    "global_take_profit_price",
+                    value=default_params.get('upper_price', 70000.0) * 1.05,
+                    format="%.2f",
+                    help="全局止盈价格"
                 )
+            else:
+                strategy_params['global_take_profit_price'] = None
+
+        # 显示网格价格预览
+        if st.button("计算网格价格"):
+            upper_price = strategy_params['upper_price']
+            lower_price = strategy_params['lower_price']
+            grid_num = strategy_params['grid_num']
+
+            if upper_price > lower_price and grid_num >= 2:
+                price_diff_per_grid = (upper_price - lower_price) / (grid_num - 1)
+                grid_prices = [lower_price + i * price_diff_per_grid for i in range(grid_num)]
+
+                st.subheader("网格价格预览")
+
+                # 使用Plotly绘制网格价格图
+                fig = go.Figure()
+
+                # 添加网格线
+                for price in grid_prices:
+                    fig.add_shape(
+                        type="line",
+                        x0=0,
+                        y0=price,
+                        x1=1,
+                        y1=price,
+                        line=dict(color="blue", width=1, dash="dash")
+                    )
+
+                fig.update_layout(
+                    title="网格价格分布",
+                    xaxis_title="",
+                    yaxis_title="价格",
+                    showlegend=False,
+                    height=400,
+                    xaxis=dict(showticklabels=False),
+                    yaxis=dict(side="right")
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # 显示网格信息
+                st.info(f"网格数量: {grid_num}, 每个网格价格间距: {price_diff_per_grid:.2f}")
+
+                # 显示网格价格表
+                grid_df = pd.DataFrame({
+                    '网格序号': range(1, grid_num + 1),
+                    '网格价格': [f"{price:.2f}" for price in grid_prices]
+                })
+
+                st.dataframe(grid_df, use_container_width=True)
+            else:
+                st.error("参数错误: upper_price必须大于lower_price，grid_num必须大于等于2")
+    else:
+        # 其他策略的参数设置
+        # 动态生成策略参数输入框
+        for i, (param_name, param_value) in enumerate(default_params.items()):
+            with param_cols[i % 3]:
+                if isinstance(param_value, bool):
+                    strategy_params[param_name] = st.checkbox(
+                        param_name,
+                        value=param_value
+                    )
+                elif isinstance(param_value, int):
+                    strategy_params[param_name] = st.number_input(
+                        param_name,
+                        value=param_value,
+                        step=1
+                    )
+                elif isinstance(param_value, float):
+                    strategy_params[param_name] = st.number_input(
+                        param_name,
+                        value=param_value,
+                        format="%.4f"
+                    )
+                else:
+                    strategy_params[param_name] = st.text_input(
+                        param_name,
+                        value=str(param_value)
+                    )
 
     # 初始资金设置
     st.subheader("资金设置")
