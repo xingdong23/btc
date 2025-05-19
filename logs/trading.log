@@ -311,3 +311,32 @@
 {"timestamp": "2025-05-19 23:17:24", "level": "INFO", "name": "trading_system", "message": "Sharpe ratio: -1.43", "logger": "trading_system"}
 {"timestamp": "2025-05-19 23:17:24", "level": "INFO", "name": "trading_system", "message": "\u56de\u6d4b\u5b8c\u6210\uff0c\u7ed3\u679c\u5df2\u4fdd\u5b58\u5230 backtest_results/results_20250519_231724.json", "logger": "trading_system"}
 {"timestamp": "2025-05-19 23:17:24", "level": "INFO", "name": "trading_system", "message": "\u7a0b\u5e8f\u6267\u884c\u5b8c\u6bd5", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:29:52", "level": "ERROR", "name": "trading_system", "message": "\u4e0d\u652f\u6301\u7684\u7b56\u7565: MovingAverageCrossover\u3002\u53ef\u7528\u7b56\u7565: ma_crossover, rsi, bollinger_bands", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:12", "level": "ERROR", "name": "trading_system", "message": "\u4e0d\u652f\u6301\u7684\u7b56\u7565: ma_crossover,\u3002\u53ef\u7528\u7b56\u7565: ma_crossover, rsi, bollinger_bands", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:20", "level": "INFO", "name": "trading_system", "message": "\u5f00\u59cb\u6a21\u62df\u4ea4\u6613: BTC/USDT 1h", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:20", "level": "INFO", "name": "trading_system", "message": "\u521d\u59cb\u8d44\u91d1: 10000.0 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:20", "level": "INFO", "name": "trading_system", "message": "\u7b56\u7565\u53c2\u6570: {'short_ma': 10, 'long_ma': 30}", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:20", "level": "INFO", "name": "trading_system", "message": "\u52a0\u8f7d\u5386\u53f2\u6570\u636e: 2025-04-19 23:30:20.496930 \u81f3 2025-05-19 23:30:20.496930", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:20", "level": "INFO", "name": "trading_system", "message": "\u6b63\u5728\u52a0\u8f7d BTC/USDT 1h \u5386\u53f2\u6570\u636e...", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:23", "level": "INFO", "name": "trading_system", "message": "\u6210\u529f\u52a0\u8f7d 721 \u6839K\u7ebf\u6570\u636e\uff0c\u65f6\u95f4\u8303\u56f4: 2025-04-19 00:00:00 \u5230 2025-05-19 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:23", "level": "INFO", "name": "trading_system", "message": "\u521d\u59cb\u5316\u7b56\u7565\u72b6\u6001...", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:23", "level": "INFO", "name": "trading_system", "message": "\u7b56\u7565\u521d\u59cb\u5316\u5b8c\u6210\uff0c\u5f00\u59cb\u6a21\u62df\u4ea4\u6613...", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:23", "level": "INFO", "name": "trading_system", "message": "\n=== \u6a21\u62df\u4ea4\u6613\u65f6\u95f4: 2025-05-19 23:30:23.175209 ===", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:30:23", "level": "ERROR", "name": "trading_system", "message": "\u6a21\u62df\u4ea4\u6613\u53d1\u751f\u9519\u8bef: 'GateIOExchange' object has no attribute 'fetch_ohlcv'", "exc_info": "Traceback (most recent call last):\n  File \"/Users/chengzheng/workspace/trade/btc/main.py\", line 305, in run_simulation\n    ohlcv = exchange.fetch_ohlcv(\nAttributeError: 'GateIOExchange' object has no attribute 'fetch_ohlcv'", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:14", "level": "INFO", "name": "trading_system", "message": "\u5f00\u59cb\u6a21\u62df\u4ea4\u6613: BTC/USDT 1h", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:14", "level": "INFO", "name": "trading_system", "message": "\u521d\u59cb\u8d44\u91d1: 10000.0 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:14", "level": "INFO", "name": "trading_system", "message": "\u7b56\u7565\u53c2\u6570: {'short_ma': 10, 'long_ma': 30}", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:14", "level": "INFO", "name": "trading_system", "message": "\u52a0\u8f7d\u5386\u53f2\u6570\u636e: 2025-04-19 23:34:14.787152 \u81f3 2025-05-19 23:34:14.787152", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:14", "level": "INFO", "name": "trading_system", "message": "\u6b63\u5728\u52a0\u8f7d BTC/USDT 1h \u5386\u53f2\u6570\u636e...", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:17", "level": "INFO", "name": "trading_system", "message": "\u6210\u529f\u52a0\u8f7d 721 \u6839K\u7ebf\u6570\u636e\uff0c\u65f6\u95f4\u8303\u56f4: 2025-04-19 00:00:00 \u5230 2025-05-19 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:17", "level": "INFO", "name": "trading_system", "message": "\u521d\u59cb\u5316\u7b56\u7565\u72b6\u6001...", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:17", "level": "INFO", "name": "trading_system", "message": "\u7b56\u7565\u521d\u59cb\u5316\u5b8c\u6210\uff0c\u5f00\u59cb\u6a21\u62df\u4ea4\u6613...", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:17", "level": "INFO", "name": "trading_system", "message": "\n=== \u6a21\u62df\u4ea4\u6613\u65f6\u95f4: 2025-05-19 23:34:17.547179 ===", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:34:17", "level": "INFO", "name": "trading_system", "message": "\u7b49\u5f85 3600 \u79d2\u540e\u66f4\u65b0...", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:35:11", "level": "INFO", "name": "trading_system", "message": "\n\u6a21\u62df\u4ea4\u6613\u5df2\u624b\u52a8\u505c\u6b62", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:35:11", "level": "INFO", "name": "trading_system", "message": "\n=== \u6a21\u62df\u4ea4\u6613\u7ed3\u675f ===", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:35:11", "level": "INFO", "name": "trading_system", "message": "\u6700\u7ec8\u8d26\u6237\u72b6\u6001:", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:35:11", "level": "INFO", "name": "trading_system", "message": "- \u4f59\u989d: 10000.00 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:35:11", "level": "INFO", "name": "trading_system", "message": "- \u6301\u4ed3: 0.000000 BTC", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:35:11", "level": "INFO", "name": "trading_system", "message": "- \u603b\u4ef7\u503c: 10000.00 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-19 23:35:11", "level": "INFO", "name": "trading_system", "message": "\u7a0b\u5e8f\u6267\u884c\u5b8c\u6bd5", "logger": "trading_system"}

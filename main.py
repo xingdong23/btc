@@ -65,6 +65,10 @@ def parse_args():
     parser.add_argument('--params', type=str, default='{}',
                        help='策略参数，JSON格式字符串')
 
+    # 实盘交易参数
+    parser.add_argument('--test_mode', action='store_true',
+                       help='测试模式，不执行实际交易，仅记录信号')
+
     # 日志级别
     parser.add_argument('--log_level', type=str, default='INFO',
                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
@@ -201,6 +205,15 @@ def run_backtest(strategy_class: Type[StrategyBase], strategy_params: Dict,
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         results_file = os.path.join(output_dir, f'results_{timestamp}.json')
 
+        # 添加策略参数到结果中
+        results['params'] = {
+            'strategy': strategy_class.__name__,
+            'symbol': data.index.name if hasattr(data.index, 'name') else 'BTC/USDT',
+            'start_date': data.index[0].strftime('%Y%m%d') if len(data) > 0 else '',
+            'end_date': data.index[-1].strftime('%Y%m%d') if len(data) > 0 else '',
+            'strategy_params': strategy_params
+        }
+
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2, default=str)
 
@@ -229,7 +242,7 @@ def run_backtest(strategy_class: Type[StrategyBase], strategy_params: Dict,
 def run_simulation(strategy_class: Type[StrategyBase], strategy_params: Dict,
                   symbol: str, timeframe: str, initial_balance: float = 10000.0):
     """
-    运行模拟交易
+    运行模拟交易（纸交易）
 
     Args:
         strategy_class: 策略类
@@ -238,12 +251,133 @@ def run_simulation(strategy_class: Type[StrategyBase], strategy_params: Dict,
         timeframe: 时间周期
         initial_balance: 初始资金
     """
-    log.info("开始模拟交易...")
-    log.warning("模拟交易功能尚未实现")
+    from exchange.gateio import GateIOExchange
+    from backtest.engine import BacktestEngine
+    import time
+    from datetime import datetime, timedelta
+
+    log.info(f"开始模拟交易: {symbol} {timeframe}")
+    log.info(f"初始资金: {initial_balance} USDT")
+    log.info(f"策略参数: {strategy_params}")
+
+    # 初始化交易所接口
+    exchange = GateIOExchange()
+
+    # 初始化回测引擎（用于模拟交易）
+    engine = BacktestEngine(initial_balance=initial_balance, fee_rate=0.001)
+
+    # 创建策略实例
+    strategy = strategy_class(strategy_params)
+    engine.set_strategy(strategy)
+
+    # 获取历史数据用于初始化策略
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=30)  # 获取30天历史数据
+
+    log.info(f"加载历史数据: {start_time} 至 {end_time}")
+    data = load_data(exchange, symbol, timeframe,
+                    start_date=start_time.strftime('%Y%m%d'),
+                    end_date=end_time.strftime('%Y%m%d'))
+
+    if data is None or len(data) == 0:
+        log.error("无法加载历史数据，模拟交易终止")
+        return
+
+    # 初始化策略状态
+    log.info("初始化策略状态...")
+    for _, row in data.iterrows():
+        bar = {
+            'symbol': symbol,
+            'open': row['open'],
+            'high': row['high'],
+            'low': row['low'],
+            'close': row['close'],
+            'volume': row['volume'],
+            'datetime': row.name.to_pydatetime()
+        }
+        strategy.on_bar(bar)
+
+    log.info("策略初始化完成，开始模拟交易...")
+
+    # 模拟交易主循环
+    try:
+        while True:
+            current_time = datetime.now()
+            log.info(f"\n=== 模拟交易时间: {current_time} ===")
+
+            # 获取最新K线数据
+            ohlcv = exchange.get_ohlcv(
+                symbol=symbol,
+                timeframe=timeframe,
+                since=int((current_time - timedelta(hours=1)).timestamp() * 1000),
+                limit=1
+            )
+
+            if ohlcv is not None and not ohlcv.empty:
+                latest_bar = ohlcv.iloc[-1]
+                bar = {
+                    'symbol': symbol,
+                    'open': latest_bar['open'],
+                    'high': latest_bar['high'],
+                    'low': latest_bar['low'],
+                    'close': latest_bar['close'],
+                    'volume': latest_bar['volume'],
+                    'datetime': latest_bar.name.to_pydatetime()
+                }
+
+                # 更新策略状态
+                signal = strategy.on_bar(bar)
+
+                # 模拟执行交易
+                if signal and signal.get('signal') in ['buy', 'sell']:
+                    log.info(f"生成交易信号: {signal}")
+                    # 在实际模拟中，这里会调用交易所API执行交易
+                    # 这里我们只记录日志
+                    if signal['signal'] == 'buy':
+                        log.info(f"[模拟] 买入 {symbol} 数量: {signal.get('size', 0):.6f} 价格: {signal['price']:.2f}")
+                    else:
+                        log.info(f"[模拟] 卖出 {symbol} 数量: {signal.get('size', 0):.6f} 价格: {signal['price']:.2f}")
+
+                # 显示账户状态
+                balance = engine.get_balance()
+                position = engine.get_position(symbol)
+                log.info(f"账户状态 - 余额: {balance:.2f} USDT | 持仓: {position:.6f} {symbol.split('/')[0]}")
+
+            # 等待下一个周期
+            sleep_time = _get_sleep_time(timeframe)
+            log.info(f"等待 {sleep_time} 秒后更新...")
+            time.sleep(sleep_time)
+
+    except KeyboardInterrupt:
+        log.info("\n模拟交易已手动停止")
+    except Exception as e:
+        log.error(f"模拟交易发生错误: {str(e)}", exc_info=True)
+    finally:
+        # 显示最终账户状态
+        balance = engine.get_balance()
+        position = engine.get_position(symbol)
+        log.info("\n=== 模拟交易结束 ===")
+        log.info(f"最终账户状态:")
+        log.info(f"- 余额: {balance:.2f} USDT")
+        log.info(f"- 持仓: {position:.6f} {symbol.split('/')[0]}")
+        log.info(f"- 总价值: {balance + position * bar['close']:.2f} USDT")
+
+def _get_sleep_time(timeframe: str) -> int:
+    """根据时间框架计算睡眠时间"""
+    timeframe_seconds = {
+        '1m': 60,
+        '5m': 300,
+        '15m': 900,
+        '30m': 1800,
+        '1h': 3600,
+        '4h': 14400,
+        '1d': 86400
+    }
+    return timeframe_seconds.get(timeframe.lower(), 60)  # 默认1分钟
     # TODO: 实现模拟交易逻辑
 
 def run_live_trading(strategy_class: Type[StrategyBase], strategy_params: Dict,
-                     symbol: str, timeframe: str):
+                     symbol: str, timeframe: str, test_mode: bool = False):
     """
     运行实盘交易
 
@@ -252,10 +386,53 @@ def run_live_trading(strategy_class: Type[StrategyBase], strategy_params: Dict,
         strategy_params: 策略参数
         symbol: 交易对
         timeframe: 时间周期
+        test_mode: 测试模式，不执行实际交易，仅记录信号
     """
-    log.info("开始实盘交易...")
-    log.warning("实盘交易功能尚未实现，请谨慎操作！")
-    # TODO: 实现实盘交易逻辑
+    from exchange.gateio import GateIOExchange
+    from trading.engine import LiveTradingEngine
+    from risk_management.manager import RiskManager
+
+    log.info(f"开始实盘交易: {symbol} {timeframe}")
+    log.info(f"策略参数: {strategy_params}")
+
+    if test_mode:
+        log.warning("当前为测试模式，不会执行实际交易")
+    else:
+        log.warning("实盘交易将执行真实交易操作，可能导致资金损失，请确认！")
+        confirmation = input("输入 'yes' 确认继续，或任意键取消: ")
+        if confirmation.lower() != 'yes':
+            log.info("实盘交易已取消")
+            return
+
+    try:
+        # 初始化交易所接口
+        exchange = GateIOExchange()
+
+        # 创建策略实例
+        strategy = strategy_class(strategy_params)
+
+        # 初始化风险管理器
+        risk_manager = RiskManager()
+
+        # 初始化实盘交易引擎
+        engine = LiveTradingEngine(
+            exchange=exchange,
+            strategy=strategy,
+            symbol=symbol,
+            timeframe=timeframe,
+            risk_manager=risk_manager,
+            test_mode=test_mode
+        )
+
+        # 启动交易引擎
+        engine.start()
+
+    except KeyboardInterrupt:
+        log.info("实盘交易已手动停止")
+    except Exception as e:
+        log.error(f"实盘交易发生错误: {str(e)}", exc_info=True)
+    finally:
+        log.info("实盘交易已结束")
 
 def main():
     """主函数"""
@@ -319,7 +496,8 @@ def main():
             strategy_class=strategy_class,
             strategy_params=strategy_params,
             symbol=args.symbol,
-            timeframe=args.timeframe
+            timeframe=args.timeframe,
+            test_mode=args.test_mode
         )
 
     log.info("程序执行完毕")
