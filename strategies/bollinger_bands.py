@@ -6,7 +6,6 @@
 """
 from typing import Dict, Any, Optional, Tuple
 import pandas as pd
-import pandas_ta as ta
 import numpy as np
 
 from .base import StrategyBase

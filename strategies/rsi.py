@@ -5,7 +5,6 @@ RSI (Relative Strength Index) 超买超卖策略
 """
 from typing import Dict, Any, Optional
 import pandas as pd
-import pandas_ta as ta
 import numpy as np
 
 from .base import StrategyBase
