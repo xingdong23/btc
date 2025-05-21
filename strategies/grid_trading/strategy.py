@@ -7,11 +7,15 @@ import time
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
+import os
+import json
 
-from .base import StrategyBase
+from strategies.base import StrategyBase
 from utils.logger import log
 from utils.helpers import round_to_tick
+from strategies.grid_trading.risk_manager import RiskManager
+from strategies.grid_trading.order_tracker import OrderTracker
 
 
 class GateioGridTrading(StrategyBase):
@@ -41,7 +45,15 @@ class GateioGridTrading(StrategyBase):
             'max_initial_orders_side': 5,
             'check_interval_seconds': 10,
             'global_stop_loss_price': None,
-            'global_take_profit_price': None
+            'global_take_profit_price': None,
+            'grid_size_pct': 2.0,  # 网格大小百分比
+            'flip_threshold_pct': 0.4,  # 触发阈值百分比 (网格大小的1/5)
+            'max_position_ratio': 0.9,  # 最大仓位比例 (90%)
+            'min_position_ratio': 0.1,  # 最小仓位比例 (10%)
+            'max_drawdown': 0.15,  # 最大回撤限制 (15%)
+            'daily_loss_limit': 0.05,  # 每日亏损限制 (5%)
+            'dynamic_grid': True,  # 是否启用动态网格
+            'data_dir': 'data'  # 数据存储目录
         }
 
     def __init__(self, params: Dict = None):
@@ -57,6 +69,29 @@ class GateioGridTrading(StrategyBase):
         self.price_precision = 8  # 价格精度，默认值
         self.amount_precision = 8  # 数量精度，默认值
         self.is_running = False  # 策略运行状态
+
+        # 创建数据目录
+        self.data_dir = self.params.get('data_dir', 'data')
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
+
+        # 初始化风控管理器和订单跟踪器
+        self.risk_manager = RiskManager(self)
+        self.order_tracker = OrderTracker(self.data_dir)
+
+        # 价格相关变量
+        self.current_price = None  # 当前价格
+        self.highest_price = None  # 最高价格
+        self.lowest_price = None  # 最低价格
+        self.price_history = []  # 价格历史
+        self.grid_size_pct = self.params.get('grid_size_pct', 2.0)  # 网格大小百分比
+        self.flip_threshold_pct = self.params.get('flip_threshold_pct', 0.4)  # 触发阈值百分比
+
+        # 交易相关变量
+        self.last_trade_time = None  # 上次交易时间
+        self.last_trade_price = None  # 上次交易价格
+        self.last_trade_side = None  # 上次交易方向
+        self.buying_or_selling = False  # 是否正在买入或卖出监测
 
         # 验证参数
         self._validate_params()
@@ -79,16 +114,30 @@ class GateioGridTrading(StrategyBase):
         """策略初始化"""
         super().init()
 
+        # 初始化风控管理器
+        self.risk_manager.initialize()
+
         # 计算网格价格点
         self._calculate_grid_prices()
 
         # 获取交易对精度信息
         self._get_symbol_precision()
 
+        # 获取当前市场价格
+        if hasattr(self, 'broker') and hasattr(self.broker, 'exchange'):
+            try:
+                ccxt_symbol = self.params['symbol'].replace('_', '/')
+                ticker = self.broker.exchange.fetch_ticker(ccxt_symbol)
+                self.current_price = ticker['last']
+                log.info(f"当前市场价格: {self.current_price}")
+            except Exception as e:
+                log.error(f"获取市场价格失败: {str(e)}")
+
         log.info(f"网格交易策略初始化完成，共{len(self.grid_prices)}个网格点")
         log.info(f"网格价格区间: {self.params['lower_price']} - {self.params['upper_price']}")
         log.info(f"每个网格价格间距: {self.price_diff_per_grid}")
-        log.info(f"网格价格点: {self.grid_prices}")
+        log.info(f"网格大小: {self.grid_size_pct}% | 触发阈值: {self.flip_threshold_pct}%")
+        log.info(f"风控参数: 最大回撤={self.params['max_drawdown']*100}% | 日亏损限制={self.params['daily_loss_limit']*100}% | 最大仓位={self.params['max_position_ratio']*100}%")
 
     def _calculate_grid_prices(self) -> None:
         """计算网格价格点"""
@@ -116,7 +165,7 @@ class GateioGridTrading(StrategyBase):
                 log.error(f"获取交易对精度信息失败: {str(e)}")
                 log.info("使用默认精度: 价格精度=8, 数量精度=8")
 
-    def on_bar(self, bar: Dict) -> Dict:
+    async def on_bar(self, bar: Dict) -> Dict:
         """
         处理K线数据
 
@@ -126,6 +175,14 @@ class GateioGridTrading(StrategyBase):
         Returns:
             Dict: 交易信号
         """
+        # 更新当前价格
+        self.current_price = bar['close']
+
+        # 更新价格历史
+        self.price_history.append(self.current_price)
+        if len(self.price_history) > 100:  # 保留最近100个价格点
+            self.price_history = self.price_history[-100:]
+
         # 网格交易策略不依赖K线数据生成信号，而是通过检查订单状态和市场价格来操作
 
         # 在回测环境中，每个K线都触发一次检查
@@ -140,14 +197,11 @@ class GateioGridTrading(StrategyBase):
             if not self.is_running:
                 # 在回测中，根据当前价格范围调整网格上下限
                 if is_backtest:
-                    # 获取当前价格
-                    current_price = bar['close']
-
                     # 如果当前价格超出了网格范围，调整网格范围
-                    if current_price > self.params['upper_price'] * 1.5 or current_price < self.params['lower_price'] * 0.5:
+                    if self.current_price > self.params['upper_price'] * 1.5 or self.current_price < self.params['lower_price'] * 0.5:
                         # 调整网格范围，使当前价格在网格范围内
                         price_range = self.params['upper_price'] - self.params['lower_price']
-                        self.params['lower_price'] = current_price * 0.8  # 当前价格的8折作为下限
+                        self.params['lower_price'] = self.current_price * 0.8  # 当前价格的8折作为下限
                         self.params['upper_price'] = self.params['lower_price'] + price_range  # 保持原来的价格范围大小
 
                         # 重新计算网格价格点
@@ -155,21 +209,36 @@ class GateioGridTrading(StrategyBase):
 
                         log.info(f"调整网格范围为: {self.params['lower_price']} - {self.params['upper_price']}")
 
-                self._start_grid_trading(bar['close'])
+                self._start_grid_trading(self.current_price)
                 self.is_running = True
             else:
-                # 检查已成交订单并处理
-                if is_backtest:
-                    # 在回测中，我们需要考虑K线的高低点来模拟订单成交
-                    self._simulate_order_execution_with_range(bar)
+                # 检查买入和卖出信号
+                if await self._check_buy_signal():
+                    await self._place_dynamic_buy_order()
+                elif await self._check_sell_signal():
+                    await self._place_dynamic_sell_order()
                 else:
-                    self._check_filled_orders(bar['close'])
+                    # 检查已成交订单并处理
+                    if is_backtest:
+                        # 在回测中，我们需要考虑K线的高低点来模拟订单成交
+                        self._simulate_order_execution_with_range(bar)
+                    else:
+                        self._check_filled_orders(self.current_price)
 
-                # 可选：检查全局止损/止盈
-                self._check_global_stop_loss_take_profit(bar['close'])
+                    # 检查风控
+                    if await self.risk_manager.check_risk(self.current_price):
+                        log.warning("触发风控保护，停止策略")
+                        self._stop_strategy()
+                    else:
+                        # 检查全局止损/止盈
+                        self._check_global_stop_loss_take_profit(self.current_price)
+
+                        # 如果启用了动态网格，检查是否需要调整网格大小
+                        if self.params.get('dynamic_grid', True):
+                            self._adjust_grid_size()
 
         # 返回hold信号，因为网格交易不通过on_bar生成买卖信号
-        return self.generate_signal('hold', bar['close'])
+        return self.generate_signal('hold', self.current_price)
 
     def _start_grid_trading(self, current_price: float) -> None:
         """
@@ -329,272 +398,112 @@ class GateioGridTrading(StrategyBase):
             'status': 'open'
         }
 
-    def _check_filled_orders(self, current_price: float) -> None:
+    async def _check_buy_signal(self) -> bool:
         """
-        检查已成交的订单并处理
+        检查买入信号
 
-        Args:
-            current_price: 当前市场价格
-        """
-        # 判断是否在回测环境中
-        if hasattr(self, 'broker') and hasattr(self.broker, 'exchange'):
-            # 实盘环境，使用交易所API获取订单状态
-            try:
-                ccxt_symbol = self.params['symbol'].replace('_', '/')
-
-                # 获取所有订单
-                orders = []
-
-                # 获取活跃买单的状态
-                for order_id in list(self.active_buy_orders.keys()):
-                    try:
-                        order = self.broker.exchange.get_order(order_id, ccxt_symbol)
-                        orders.append(order)
-                    except Exception as e:
-                        log.error(f"获取买单{order_id}状态失败: {str(e)}")
-                        # 如果订单不存在，从活跃订单列表中移除
-                        self.active_buy_orders.pop(order_id, None)
-
-                # 获取活跃卖单的状态
-                for order_id in list(self.active_sell_orders.keys()):
-                    try:
-                        order = self.broker.exchange.get_order(order_id, ccxt_symbol)
-                        orders.append(order)
-                    except Exception as e:
-                        log.error(f"获取卖单{order_id}状态失败: {str(e)}")
-                        # 如果订单不存在，从活跃订单列表中移除
-                        self.active_sell_orders.pop(order_id, None)
-
-                # 处理已成交的订单
-                for order in orders:
-                    if order['id'] in self.processed_orders:
-                        continue
-
-                    if order['status'] == 'closed':
-                        self._handle_filled_order(order)
-                        self.processed_orders.add(order['id'])
-
-            except Exception as e:
-                log.error(f"检查订单状态失败: {str(e)}")
-        else:
-            # 回测环境，模拟订单成交
-            self._simulate_order_execution(current_price)
-
-    def _simulate_order_execution(self, current_price: float) -> None:
-        """
-        模拟订单成交
-
-        Args:
-            current_price: 当前市场价格
-        """
-        # 检查买单是否成交
-        for order_id, order_info in list(self.active_buy_orders.items()):
-            if order_id in self.processed_orders:
-                continue
-
-            # 如果当前价格低于或等于买单价格，则认为买单成交
-            # 注意：在回测中，我们需要检查当前价格是否在这根K线的价格范围内触及了买单价格
-            if current_price <= order_info['price']:
-                # 创建模拟成交订单
-                filled_order = {
-                    'id': order_id,
-                    'side': 'buy',
-                    'price': order_info['price'],
-                    'amount': order_info['amount'],
-                    'status': 'closed',
-                    'timestamp': int(time.time() * 1000),
-                    'datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'cost': order_info['price'] * order_info['amount'],
-                    'fee': order_info['price'] * order_info['amount'] * 0.001  # 假设0.1%手续费
-                }
-
-                # 处理成交订单
-                self._handle_filled_order(filled_order)
-                self.processed_orders.add(order_id)
-
-                # 记录交易
-                trade = {
-                    'datetime': datetime.now(),
-                    'timestamp': int(time.time() * 1000),
-                    'symbol': self.params['symbol'],
-                    'type': 'buy',
-                    'side': 'buy',
-                    'price': order_info['price'],
-                    'amount': order_info['amount'],
-                    'cost': order_info['price'] * order_info['amount'],
-                    'fee': order_info['price'] * order_info['amount'] * 0.001
-                }
-                self.trades.append(trade)
-
-                log.info(f"回测模式买单成交: {order_id}, 价格={order_info['price']}, 数量={order_info['amount']}")
-
-        # 检查卖单是否成交
-        for order_id, order_info in list(self.active_sell_orders.items()):
-            if order_id in self.processed_orders:
-                continue
-
-            # 如果当前价格高于或等于卖单价格，则认为卖单成交
-            # 注意：在回测中，我们需要检查当前价格是否在这根K线的价格范围内触及了卖单价格
-            if current_price >= order_info['price']:
-                # 创建模拟成交订单
-                filled_order = {
-                    'id': order_id,
-                    'side': 'sell',
-                    'price': order_info['price'],
-                    'amount': order_info['amount'],
-                    'status': 'closed',
-                    'timestamp': int(time.time() * 1000),
-                    'datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'cost': order_info['price'] * order_info['amount'],
-                    'fee': order_info['price'] * order_info['amount'] * 0.001  # 假设0.1%手续费
-                }
-
-                # 处理成交订单
-                self._handle_filled_order(filled_order)
-                self.processed_orders.add(order_id)
-
-                # 记录交易
-                trade = {
-                    'datetime': datetime.now(),
-                    'timestamp': int(time.time() * 1000),
-                    'symbol': self.params['symbol'],
-                    'type': 'sell',
-                    'side': 'sell',
-                    'price': order_info['price'],
-                    'amount': order_info['amount'],
-                    'cost': order_info['price'] * order_info['amount'],
-                    'fee': order_info['price'] * order_info['amount'] * 0.001
-                }
-                self.trades.append(trade)
-
-                log.info(f"回测模式卖单成交: {order_id}, 价格={order_info['price']}, 数量={order_info['amount']}")
-
-    def _handle_filled_order(self, order: Dict) -> None:
-        """
-        处理已成交的订单
-
-        Args:
-            order: 订单信息
-        """
-        order_id = order['id']
-        side = order['side']
-        price = order['price']
-        amount = order['amount']
-
-        log.info(f"订单{order_id}已成交: {side} {amount} @ {price}")
-
-        # 根据成交的订单类型处理
-        if side == 'buy':
-            # 买单成交，从活跃买单列表中移除
-            if order_id in self.active_buy_orders:
-                self.active_buy_orders.pop(order_id)
-
-                # 在上一个网格点挂卖单
-                target_sell_price = price + self.price_diff_per_grid
-
-                if target_sell_price <= self.params['upper_price']:
-                    self._place_sell_order(target_sell_price)
-                else:
-                    log.info(f"目标卖出价格{target_sell_price}超过上限{self.params['upper_price']}，不挂卖单")
-
-        elif side == 'sell':
-            # 卖单成交，从活跃卖单列表中移除
-            if order_id in self.active_sell_orders:
-                self.active_sell_orders.pop(order_id)
-
-                # 在下一个网格点挂买单
-                target_buy_price = price - self.price_diff_per_grid
-
-                if target_buy_price >= self.params['lower_price']:
-                    self._place_buy_order(target_buy_price)
-                else:
-                    log.info(f"目标买入价格{target_buy_price}低于下限{self.params['lower_price']}，不挂买单")
-
-    def _check_global_stop_loss_take_profit(self, current_price: float) -> None:
-        """
-        检查全局止损/止盈
-
-        Args:
-            current_price: 当前市场价格
-        """
-        # 检查全局止损
-        if (self.params['global_stop_loss_price'] is not None and
-            current_price <= self.params['global_stop_loss_price']):
-            log.warning(f"触发全局止损: 当前价格{current_price} <= 止损价格{self.params['global_stop_loss_price']}")
-            self._stop_strategy()
-            return
-
-        # 检查全局止盈
-        if (self.params['global_take_profit_price'] is not None and
-            current_price >= self.params['global_take_profit_price']):
-            log.warning(f"触发全局止盈: 当前价格{current_price} >= 止盈价格{self.params['global_take_profit_price']}")
-            self._stop_strategy()
-            return
-
-    def _stop_strategy(self) -> None:
-        """停止策略，取消所有订单并平仓"""
-        # 判断是否在回测环境中
-        is_backtest = not (hasattr(self, 'broker') and hasattr(self.broker, 'exchange'))
-
-        if is_backtest:
-            # 回测环境，直接清空订单列表
-            self.active_buy_orders.clear()
-            self.active_sell_orders.clear()
-            log.warning("回测模式停止策略，清空所有订单")
-            self.is_running = False
-            return
-
-        # 实盘环境
-        try:
-            ccxt_symbol = self.params['symbol'].replace('_', '/')
-
-            # 取消所有活跃订单
-            for order_id in list(self.active_buy_orders.keys()):
-                try:
-                    self.broker.exchange.cancel_order(order_id, ccxt_symbol)
-                    log.info(f"取消买单: {order_id}")
-                except Exception as e:
-                    log.error(f"取消买单{order_id}失败: {str(e)}")
-                self.active_buy_orders.pop(order_id, None)
-
-            for order_id in list(self.active_sell_orders.keys()):
-                try:
-                    self.broker.exchange.cancel_order(order_id, ccxt_symbol)
-                    log.info(f"取消卖单: {order_id}")
-                except Exception as e:
-                    log.error(f"取消卖单{order_id}失败: {str(e)}")
-                self.active_sell_orders.pop(order_id, None)
-
-            # 市价卖出所有持仓
-            base_currency = ccxt_symbol.split('/')[0]
-            balance = self.broker.exchange.get_balance(base_currency)
-
-            if balance > 0:
-                self.broker.exchange.create_order(
-                    symbol=ccxt_symbol,
-                    order_type='market',
-                    side='sell',
-                    amount=balance
-                )
-                log.info(f"市价卖出所有{base_currency}持仓: {balance}")
-
-            self.is_running = False
-            log.warning("策略已停止")
-
-        except Exception as e:
-            log.error(f"停止策略失败: {str(e)}")
-
-    def get_grid_status(self) -> Dict:
-        """
-        获取网格状态
+        当价格低于网格下轨时，进入买入监测模式。
+        当价格从最低点反弹超过指定阈值时，触发买入信号。
 
         Returns:
-            Dict: 网格状态信息
+            bool: 是否触发买入信号
         """
-        return {
-            'grid_prices': self.grid_prices,
-            'price_diff_per_grid': self.price_diff_per_grid,
-            'active_buy_orders': self.active_buy_orders,
-            'active_sell_orders': self.active_sell_orders,
-            'is_running': self.is_running
-        }
+        if not self.current_price:
+            return False
+
+        # 计算网格下轨
+        lower_band = self._get_lower_band()
+
+        if self.current_price <= lower_band:
+            # 进入买入监测模式
+            self.buying_or_selling = True
+
+            # 更新最低价格
+            if self.lowest_price is None or self.current_price < self.lowest_price:
+                self.lowest_price = self.current_price
+                log.info(
+                    f"买入监测 | "
+                    f"当前价: {self.current_price:.2f} | "
+                    f"触发价: {lower_band:.2f} | "
+                    f"最低价: {self.lowest_price:.2f} | "
+                    f"反弹阈值: {self.flip_threshold_pct:.2f}%"
+                )
+
+            # 计算反弹阈值
+            threshold = self.flip_threshold_pct / 100.0
+
+            # 如果价格从最低点反弹超过阈值，触发买入信号
+            if self.lowest_price and self.current_price >= self.lowest_price * (1 + threshold):
+                self.buying_or_selling = False  # 重置监测状态
+                log.info(f"触发买入信号 | 当前价: {self.current_price:.2f} | 已反弹: {(self.current_price/self.lowest_price-1)*100:.2f}%")
+
+                # 重置最低价格
+                self.lowest_price = None
+
+                return True
+        else:
+            # 价格高于网格下轨，退出买入监测模式
+            if self.buying_or_selling:
+                self.buying_or_selling = False
+                self.lowest_price = None
+
+        return False
+
+    async def _check_sell_signal(self) -> bool:
+        """
+        检查卖出信号
+
+        当价格高于网格上轨时，进入卖出监测模式。
+        当价格从最高点回调超过指定阈值时，触发卖出信号。
+
+        Returns:
+            bool: 是否触发卖出信号
+        """
+        if not self.current_price:
+            return False
+
+        # 计算网格上轨
+        upper_band = self._get_upper_band()
+
+        if self.current_price >= upper_band:
+            # 进入卖出监测模式
+            self.buying_or_selling = True
+
+            # 更新最高价格
+            if self.highest_price is None or self.current_price > self.highest_price:
+                self.highest_price = self.current_price
+                log.info(
+                    f"卖出监测 | "
+                    f"当前价: {self.current_price:.2f} | "
+                    f"触发价: {upper_band:.2f} | "
+                    f"最高价: {self.highest_price:.2f} | "
+                    f"回调阈值: {self.flip_threshold_pct:.2f}%"
+                )
+
+            # 计算回调阈值
+            threshold = self.flip_threshold_pct / 100.0
+
+            # 如果价格从最高点回调超过阈值，触发卖出信号
+            if self.highest_price and self.current_price <= self.highest_price * (1 - threshold):
+                self.buying_or_selling = False  # 重置监测状态
+                log.info(f"触发卖出信号 | 当前价: {self.current_price:.2f} | 已回调: {(1-self.current_price/self.highest_price)*100:.2f}%")
+
+                # 重置最高价格
+                self.highest_price = None
+
+                return True
+        else:
+            # 价格低于网格上轨，退出卖出监测模式
+            if self.buying_or_selling:
+                self.buying_or_selling = False
+                self.highest_price = None
+
+        return False
+
+    def _get_upper_band(self) -> float:
+        """获取网格上轨价格"""
+        return self.params['upper_price'] * (1 - self.grid_size_pct / 100.0)
+
+    def _get_lower_band(self) -> float:
+        """获取网格下轨价格"""
+        return self.params['lower_price'] * (1 + self.grid_size_pct / 100.0)

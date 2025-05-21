@@ -19,16 +19,10 @@ from config.config import config
 from utils.logger import log
 from exchange.gateio import GateIOExchange
 from strategies.base import StrategyBase
-from strategies.ma_crossover import MovingAverageCrossover
-from strategies.rsi import RSIStrategy
-from strategies.bollinger_bands import BollingerBandsStrategy
 from strategies.grid_trading import GateioGridTrading
 
 # 策略映射
 STRATEGY_MAP = {
-    'ma_crossover': MovingAverageCrossover,
-    'rsi': RSIStrategy,
-    'bollinger_bands': BollingerBandsStrategy,
     'grid_trading': GateioGridTrading
 }
 
@@ -222,33 +216,7 @@ def render_trading_page():
                 st.dataframe(grid_df, use_container_width=True)
             else:
                 st.error("参数错误: upper_price必须大于lower_price，grid_num必须大于等于2")
-    else:
-        # 其他策略的参数设置
-        # 动态生成策略参数输入框
-        for i, (param_name, param_value) in enumerate(default_params.items()):
-            with param_cols[i % 3]:
-                if isinstance(param_value, bool):
-                    strategy_params[param_name] = st.checkbox(
-                        param_name,
-                        value=param_value
-                    )
-                elif isinstance(param_value, int):
-                    strategy_params[param_name] = st.number_input(
-                        param_name,
-                        value=param_value,
-                        step=1
-                    )
-                elif isinstance(param_value, float):
-                    strategy_params[param_name] = st.number_input(
-                        param_name,
-                        value=param_value,
-                        format="%.4f"
-                    )
-                else:
-                    strategy_params[param_name] = st.text_input(
-                        param_name,
-                        value=str(param_value)
-                    )
+    # 网格交易是唯一的策略，不需要其他策略的参数设置代码
 
     # 初始资金设置
     st.subheader("资金设置")

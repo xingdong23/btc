@@ -23,17 +23,13 @@ from config.config import config
 from utils.logger import setup_logger, log
 from exchange.gateio import GateIOExchange
 from strategies.base import StrategyBase
-from strategies.ma_crossover import MovingAverageCrossover
-from strategies.rsi import RSIStrategy
-from strategies.bollinger_bands import BollingerBandsStrategy
+from strategies.grid_trading import GateioGridTrading
 from backtest.engine import BacktestEngine
 from risk_management.manager import RiskManager
 
 # 策略映射
 STRATEGY_MAP = {
-    'ma_crossover': MovingAverageCrossover,
-    'rsi': RSIStrategy,
-    'bollinger_bands': BollingerBandsStrategy
+    'grid_trading': GateioGridTrading
 }
 
 def parse_args():
@@ -45,7 +41,7 @@ def parse_args():
                        choices=['backtest', 'simulate', 'live'],
                        help='运行模式: backtest(回测), simulate(模拟交易), live(实盘交易)')
     parser.add_argument('--strategy', type=str, required=True,
-                       help='策略名称，如 ma_crossover, rsi, bollinger_bands')
+                       help='策略名称，如 grid_trading')
     parser.add_argument('--symbol', type=str, required=True,
                        help='交易对，如 BTC/USDT, ETH/USDT')
 

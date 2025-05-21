@@ -876,3 +876,27 @@
 {"timestamp": "2025-05-20 00:36:07", "level": "INFO", "name": "trading_system", "message": "Sharpe ratio: 0.00", "logger": "trading_system"}
 {"timestamp": "2025-05-20 00:36:37", "level": "ERROR", "name": "trading_system", "message": "Failed to fetch balance: gateio {\"label\":\"INVALID_KEY\",\"message\":\"Invalid key provided\"}", "logger": "trading_system"}
 {"timestamp": "2025-05-20 00:36:37", "level": "ERROR", "name": "trading_system", "message": "Failed to fetch open orders: gateio {\"label\":\"INVALID_KEY\",\"message\":\"Invalid key provided\"}", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:01", "level": "INFO", "name": "trading_system", "message": "\u6b63\u5728\u52a0\u8f7d BTC/USDT 1h \u5386\u53f2\u6570\u636e...", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "\u6210\u529f\u52a0\u8f7d 721 \u6839K\u7ebf\u6570\u636e\uff0c\u65f6\u95f4\u8303\u56f4: 2025-04-20 00:00:00 \u5230 2025-05-20 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Loaded 721 bars from 2025-04-20 00:00:00 to 2025-05-20 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Strategy RSIStrategy initialized with params: {'rsi_period': 14, 'oversold': 30.0, 'overbought': 70.0, 'use_signal_confirmation': True, 'confirmation_period': 3, 'stop_loss': 0.05, 'take_profit': 0.1}", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "RSIStrategy strategy initialized with parameters: {'rsi_period': 14, 'oversold': 30.0, 'overbought': 70.0, 'use_signal_confirmation': True, 'confirmation_period': 3, 'stop_loss': 0.05, 'take_profit': 0.1}", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Starting backtest from 2025-04-20 00:00:00 to 2025-05-20 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Initial balance: 1000.00 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Backtest completed in 0.03 seconds", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Final balance: 1000.00 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Total return: 0.00%", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Max drawdown: 0.00%", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:05", "level": "INFO", "name": "trading_system", "message": "Sharpe ratio: 0.00", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:28", "level": "INFO", "name": "trading_system", "message": "\u6b63\u5728\u52a0\u8f7d BTC/USDT 1h \u5386\u53f2\u6570\u636e...", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "\u6210\u529f\u52a0\u8f7d 721 \u6839K\u7ebf\u6570\u636e\uff0c\u65f6\u95f4\u8303\u56f4: 2025-04-20 00:00:00 \u5230 2025-05-20 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Loaded 721 bars from 2025-04-20 00:00:00 to 2025-05-20 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Strategy MovingAverageCrossover initialized with params: {'short_ma': 10, 'long_ma': 30, 'use_sma': True, 'stop_loss': 0.05, 'take_profit': 0.1}", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "MovingAverageCrossover strategy initialized with parameters: {'short_ma': 10, 'long_ma': 30, 'use_sma': True, 'stop_loss': 0.05, 'take_profit': 0.1}", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Starting backtest from 2025-04-20 00:00:00 to 2025-05-20 00:00:00", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Initial balance: 1000.00 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Backtest completed in 0.02 seconds", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Final balance: 1000.00 USDT", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Total return: 0.00%", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Max drawdown: 0.00%", "logger": "trading_system"}
+{"timestamp": "2025-05-20 23:06:31", "level": "INFO", "name": "trading_system", "message": "Sharpe ratio: 0.00", "logger": "trading_system"}
