@@ -240,8 +240,16 @@ class RSISupportResistanceStrategy(StrategyBase):
         if self.current_rsi is None:
             return None
 
+        # 确保有足够的数据进行交易决策
+        if len(self.price_data) < 30 or len(self.rsi_values) < 5:
+            return None
+
         # 获取支撑阻力水平
         nearest_support, nearest_resistance = self.sr_detector.get_nearest_levels(self.current_price)
+
+        # 如果没有支撑阻力水平，则不交易
+        if not nearest_support and not nearest_resistance:
+            return None
 
         # 买入条件：RSI超卖且接近支撑位
         if (self.current_rsi <= self.params['rsi_oversold'] and
@@ -298,8 +306,8 @@ class RSISupportResistanceStrategy(StrategyBase):
                 self.sell_signals = 0
 
                 # 生成买入信号
-                log.info(f"买入信号 | 价格: {self.current_price:.2f} | RSI: {self.current_rsi:.1f} | "
-                         f"支撑: {nearest_support:.2f if nearest_support else 'N/A'} | "
+                log.info(f"买入信号 | 价格: {self.current_price:.2f} | RSI: {float(self.current_rsi):.1f} | "
+                         f"支撑: {nearest_support:.2f if nearest_support is not None else 'N/A'} | "
                          f"止损: {stop_loss:.2f} | 止盈: {take_profit:.2f}")
 
                 return self.generate_signal(
@@ -333,6 +341,10 @@ class RSISupportResistanceStrategy(StrategyBase):
         if not self.in_position:
             return None
 
+        # 确保有足够的数据进行交易决策
+        if self.current_rsi is None or len(self.price_data) < 20:
+            return None
+
         # 更新入场后的最高最低价
         self.highest_since_entry = max(self.highest_since_entry, bar['high'])
         self.lowest_since_entry = min(self.lowest_since_entry, bar['low'])
@@ -343,8 +355,8 @@ class RSISupportResistanceStrategy(StrategyBase):
         # 检查止损
         if self.current_price <= self.trailing_stop:
             # 触发止损
-            log.info(f"触发止损 | 价格: {self.current_price:.2f} | 止损价: {self.trailing_stop:.2f} | "
-                     f"入场价: {self.entry_price:.2f} | 盈亏: {(self.current_price/self.entry_price-1)*100:.2f}%")
+            log.info(f"触发止损 | 价格: {float(self.current_price):.2f} | 止损价: {float(self.trailing_stop):.2f} | "
+                     f"入场价: {float(self.entry_price):.2f} | 盈亏: {(self.current_price/self.entry_price-1)*100:.2f}%")
 
             # 更新交易状态
             self.in_position = False
@@ -366,8 +378,8 @@ class RSISupportResistanceStrategy(StrategyBase):
         # 检查止盈
         if self.current_price >= self.take_profit:
             # 触发止盈
-            log.info(f"触发止盈 | 价格: {self.current_price:.2f} | 止盈价: {self.take_profit:.2f} | "
-                     f"入场价: {self.entry_price:.2f} | 盈亏: {(self.current_price/self.entry_price-1)*100:.2f}%")
+            log.info(f"触发止盈 | 价格: {float(self.current_price):.2f} | 止盈价: {float(self.take_profit):.2f} | "
+                     f"入场价: {float(self.entry_price):.2f} | 盈亏: {(self.current_price/self.entry_price-1)*100:.2f}%")
 
             # 更新交易状态
             self.in_position = False
@@ -396,8 +408,8 @@ class RSISupportResistanceStrategy(StrategyBase):
             # 检查信号确认
             if self.sell_signals >= self.params['confirmation_period']:
                 # 触发RSI超买卖出
-                log.info(f"RSI超买卖出 | 价格: {self.current_price:.2f} | RSI: {self.current_rsi:.1f} | "
-                         f"阻力: {nearest_resistance:.2f if nearest_resistance else 'N/A'} | "
+                log.info(f"RSI超买卖出 | 价格: {self.current_price:.2f} | RSI: {float(self.current_rsi):.1f} | "
+                         f"阻力: {nearest_resistance:.2f if nearest_resistance is not None else 'N/A'} | "
                          f"入场价: {self.entry_price:.2f} | 盈亏: {(self.current_price/self.entry_price-1)*100:.2f}%")
 
                 # 更新交易状态
@@ -430,9 +442,9 @@ class RSISupportResistanceStrategy(StrategyBase):
             hours_in_position = (datetime.now() - self.entry_time).total_seconds() / 3600
             if hours_in_position >= self.params['time_in_market_limit']:
                 # 触发持仓时间限制
-                log.info(f"持仓时间限制卖出 | 价格: {self.current_price:.2f} | "
-                         f"持仓时间: {hours_in_position:.1f}小时 | "
-                         f"入场价: {self.entry_price:.2f} | 盈亏: {(self.current_price/self.entry_price-1)*100:.2f}%")
+                log.info(f"持仓时间限制卖出 | 价格: {float(self.current_price):.2f} | "
+                         f"持仓时间: {float(hours_in_position):.1f}小时 | "
+                         f"入场价: {float(self.entry_price):.2f} | 盈亏: {(self.current_price/self.entry_price-1)*100:.2f}%")
 
                 # 更新交易状态
                 self.in_position = False
@@ -465,8 +477,8 @@ class RSISupportResistanceStrategy(StrategyBase):
         # 仅上移止损，不下移
         if new_stop > self.trailing_stop:
             self.trailing_stop = new_stop
-            log.info(f"更新追踪止损 | 新止损: {self.trailing_stop:.2f} | "
-                     f"当前价: {self.current_price:.2f} | 最高价: {self.highest_since_entry:.2f}")
+            log.info(f"更新追踪止损 | 新止损: {float(self.trailing_stop):.2f} | "
+                     f"当前价: {float(self.current_price):.2f} | 最高价: {float(self.highest_since_entry):.2f}")
 
     def get_strategy_state(self) -> Dict:
         """

@@ -479,14 +479,25 @@ class VWAPTraderStrategy(StrategyBase):
         
         # u68c0u67e5u662fu5426u5e94u8be5u57fau4e8eVWAPu76f8u5bf9u4f4du7f6eu5356u51fa
         # u5f53u4ef7u683cu8d85u8fc7VWAPu4e00u5b9au6bd4u4f8bu4e14u6709u5145u8db3u7684u6210u4ea4u91cf
-        if (price_to_vwap_ratio >= self.params['sell_threshold'] and 
-            volume_ratio >= self.params['volume_factor']):
+        if ((price_to_vwap_ratio >= self.params['sell_threshold'] and 
+            volume_ratio >= self.params['volume_factor']) or
+            (self.params.get('use_rsi_filter', False) and self.current_rsi is not None and 
+             self.current_rsi >= self.params['rsi_sell_threshold'])):
             
-            # u89e6u53d1VWAPu76f8u5bf9u4f4du7f6eu5356u51fa
             vwap_diff_percent = price_to_vwap_ratio * 100
-            log.info(f"VWAPu76f8u5bf9u4f4du7f6eu5356u51fa | u4ef7u683c: {self.current_price:.2f} | VWAP: {self.current_vwap:.2f} | "
-                     f"u504fu79bb: {vwap_diff_percent:.2f}% | u6210u4ea4u91cfu6bd4: {volume_ratio:.2f}x | "
-                     f"u5165u573au4ef7: {self.entry_price:.2f} | u76c8u4e8f: {(self.current_price/self.entry_price-1)*100:.2f}%")
+            exit_reason = 'vwap_deviation'
+            
+            # u786eu5b9au9000u51fau539fu56e0
+            if self.params.get('use_rsi_filter', False) and self.current_rsi is not None and \
+               self.current_rsi >= self.params['rsi_sell_threshold']:
+                exit_reason = 'rsi_overbought'
+                log.info(f"RSIu8d85u4e70u5356u51fa | u4ef7u683c: {self.current_price:.2f} | RSI: {self.current_rsi:.2f} | "
+                         f"VWAP: {self.current_vwap:.2f} | u504fu79bb: {vwap_diff_percent:.2f}% | "
+                         f"u5165u573au4ef7: {self.entry_price:.2f} | u76c8u4e8f: {(self.current_price/self.entry_price-1)*100:.2f}%")
+            else:
+                log.info(f"VWAPu76f8u5bf9u4f4du7f6eu5356u51fa | u4ef7u683c: {self.current_price:.2f} | VWAP: {self.current_vwap:.2f} | "
+                         f"u504fu79bb: {vwap_diff_percent:.2f}% | u6210u4ea4u91cfu6bd4: {volume_ratio:.2f}x | "
+                         f"u5165u573au4ef7: {self.entry_price:.2f} | u76c8u4e8f: {(self.current_price/self.entry_price-1)*100:.2f}%")
             
             # u66f4u65b0u4ea4u6613u72b6u6001
             self.in_position = False
@@ -499,10 +510,11 @@ class VWAPTraderStrategy(StrategyBase):
                 None,
                 None,
                 {
-                    'exit_reason': 'vwap_deviation',
+                    'exit_reason': exit_reason,
                     'vwap': self.current_vwap,
                     'vwap_diff_percent': vwap_diff_percent,
                     'volume_ratio': volume_ratio,
+                    'rsi': self.current_rsi,
                     'entry_price': self.entry_price,
                     'profit_pct': (self.current_price / self.entry_price - 1) * 100
                 }
@@ -580,6 +592,9 @@ class VWAPTraderStrategy(StrategyBase):
             'trades_today': self.trades_today,
             'volume_ma': self.volume_ma,
             'trend': trend_desc,
+            'current_rsi': self.current_rsi,
+            'rsi_buy_threshold': self.params.get('rsi_buy_threshold', 30),
+            'rsi_sell_threshold': self.params.get('rsi_sell_threshold', 70),
             'ma_short': sum([data['close'] for data in self.price_data[-self.params['trend_ma_short']:]]) / self.params['trend_ma_short'] if len(self.price_data) >= self.params['trend_ma_short'] else None,
             'ma_long': sum([data['close'] for data in self.price_data[-self.params['trend_ma_long']:]]) / self.params['trend_ma_long'] if len(self.price_data) >= self.params['trend_ma_long'] else None
         }
