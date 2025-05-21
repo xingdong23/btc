@@ -40,6 +40,7 @@ class RSISupportResistanceStrategy(StrategyBase):
             'rsi_period': 14,  # RSI计算周期
             'rsi_oversold': 30,  # RSI超卖阈值
             'rsi_overbought': 70,  # RSI超买阈值
+            'rsi_error_margin': 1.0,  # RSI误差容忍度，表示超买超卖阈值的容忍范围
             'rsi_exit_oversold': 50,  # RSI退出超卖区域阈值
             'rsi_exit_overbought': 50,  # RSI退出超买区域阈值
             'sr_lookback_period': 100,  # 支撑阻力回溯周期
@@ -251,8 +252,8 @@ class RSISupportResistanceStrategy(StrategyBase):
         if not nearest_support and not nearest_resistance:
             return None
 
-        # 买入条件：RSI超卖且接近支撑位
-        if (self.current_rsi <= self.params['rsi_oversold'] and
+        # 买入条件：RSI超卖（含误差容忍度）且接近支撑位
+        if (self.current_rsi <= (self.params['rsi_oversold'] + self.params['rsi_error_margin']) and
             self.sr_detector.is_near_support(self.current_price)):
 
             # 增加买入信号计数
@@ -405,8 +406,8 @@ class RSISupportResistanceStrategy(StrategyBase):
                 }
             )
 
-        # 检查RSI超买且接近阻力位
-        if (self.current_rsi >= self.params['rsi_overbought'] and
+        # 检查RSI超买（含误差容忍度）且接近阻力位
+        if (self.current_rsi >= (self.params['rsi_overbought'] - self.params['rsi_error_margin']) and
             self.sr_detector.is_near_resistance(self.current_price)):
 
             # 增加卖出信号计数
