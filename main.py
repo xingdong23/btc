@@ -24,12 +24,16 @@ from utils.logger import setup_logger, log
 from exchange.gateio import GateIOExchange
 from strategies.base import StrategyBase
 from strategies.grid_trading import GateioGridTrading
+from strategies.rsi_support_resistance import RSISupportResistanceStrategy
+from strategies.vwap_trader import VWAPTraderStrategy
 from backtest.engine import BacktestEngine
 from risk_management.manager import RiskManager
 
 # 策略映射
 STRATEGY_MAP = {
-    'grid_trading': GateioGridTrading
+    'grid_trading': GateioGridTrading,
+    'rsi_sr': RSISupportResistanceStrategy,
+    'vwap': VWAPTraderStrategy
 }
 
 def parse_args():
