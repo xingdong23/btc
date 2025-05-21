@@ -306,9 +306,16 @@ class RSISupportResistanceStrategy(StrategyBase):
                 self.sell_signals = 0
 
                 # 生成买入信号
-                log.info(f"买入信号 | 价格: {self.current_price:.2f} | RSI: {float(self.current_rsi):.1f} | "
-                         f"支撑: {nearest_support:.2f if nearest_support is not None else 'N/A'} | "
-                         f"止损: {stop_loss:.2f} | 止盈: {take_profit:.2f}")
+                # 使用字符串格式化而不是f-string来避免格式化问题
+                price_str = "{:.2f}".format(float(self.current_price))
+                rsi_str = "{:.1f}".format(float(self.current_rsi))
+                support_str = "{:.2f}".format(float(nearest_support)) if nearest_support is not None else "N/A"
+                sl_str = "{:.2f}".format(float(stop_loss))
+                tp_str = "{:.2f}".format(float(take_profit))
+
+                log.info("买入信号 | 价格: {} | RSI: {} | 支撑: {} | 止损: {} | 止盈: {}".format(
+                    price_str, rsi_str, support_str, sl_str, tp_str
+                ))
 
                 return self.generate_signal(
                     'buy',
