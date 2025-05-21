@@ -3,11 +3,9 @@
 
 提供高级风险管理功能，包括回撤控制、仓位管理和动态风险调整。
 """
-import logging
 import time
 import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from utils.logger import log
 
@@ -422,3 +420,43 @@ class RiskManager:
             return 0.0
 
         return self.position_value / self.total_assets
+        
+    async def get_position_ratio(self) -> float:
+        """
+        异步获取当前仓位比例
+
+        Returns:
+            float: 仓位比例 (0-1)
+        """
+        return self._get_position_ratio()
+        
+    async def get_position_size(self) -> float:
+        """
+        获取当前持仓数量
+
+        Returns:
+            float: 持仓数量（基础货币数量）
+        """
+        try:
+            if hasattr(self.strategy, 'broker') and hasattr(self.strategy.broker, 'exchange'):
+                # 实盘环境，从交易所获取持仓信息
+                ccxt_symbol = self.strategy.params['symbol'].replace('_', '/')
+                # 获取基础货币名称（如BTC_USDT中的BTC）
+                base_currency = ccxt_symbol.split('/')[0]
+                
+                try:
+                    balance = self.strategy.broker.exchange.fetch_balance()
+                    if base_currency in balance and 'free' in balance[base_currency]:
+                        return float(balance[base_currency]['free'])
+                except Exception as e:
+                    log.error(f"获取持仓数量失败: {str(e)}")
+                    return 0.0
+            
+            # 回测环境或获取失败，估算持仓
+            if self.strategy.current_price and self.strategy.current_price > 0:
+                return self.position_value / self.strategy.current_price
+                
+            return 0.0
+        except Exception as e:
+            log.error(f"计算持仓数量时出错: {str(e)}")
+            return 0.0

@@ -4,12 +4,8 @@ Gate.io 现货网格交易策略
 在预设的价格区间内，通过在多个网格点上自动进行低买高卖，捕捉小幅价格波动以获取利润。
 """
 import time
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from typing import Dict
 import os
-import json
 
 from strategies.base import StrategyBase
 from utils.logger import log
@@ -507,3 +503,146 @@ class GateioGridTrading(StrategyBase):
     def _get_lower_band(self) -> float:
         """获取网格下轨价格"""
         return self.params['lower_price'] * (1 + self.grid_size_pct / 100.0)
+        
+    async def _place_dynamic_buy_order(self) -> None:
+        """
+        动态买单逻辑
+        
+        当价格跌破网格下轨并反弹时触发，动态计算买单价格和数量
+        """
+        if not self.current_price:
+            return
+            
+        # 计算动态买单价格（当前价格的小幅折扣）
+        buy_price = round_to_tick(self.current_price * 0.998, 10**(-self.price_precision))
+        
+        # 根据资金管理计算买单数量
+        position_ratio = await self.risk_manager.get_position_ratio()
+        max_ratio = self.params.get('max_position_ratio', 0.9)
+        
+        # 如果仓位已经很大，减少买单数量
+        amount_modifier = 1.0
+        if position_ratio > max_ratio * 0.7:  # 已经接近最大仓位的70%
+            amount_modifier = max(0.3, 1 - (position_ratio / max_ratio))
+            log.info(f"仓位占比较高 ({position_ratio:.2%})，调整买单数量为正常的{amount_modifier:.2%}")
+        
+        # 计算最终买单数量
+        buy_amount = round_to_tick(
+            self.params['order_amount_base'] * amount_modifier,
+            10**(-self.amount_precision)
+        )
+        
+        # 确保买单数量不小于最小交易量
+        if buy_amount < 0.0001:  # 假设最小交易量是0.0001
+            buy_amount = 0.0001
+            
+        # 生成订单ID
+        order_id = f"dynamic_buy_{int(time.time() * 1000)}_{buy_price}"
+        
+        # 判断是否在回测环境中
+        if hasattr(self, 'broker') and hasattr(self.broker, 'exchange'):
+            try:
+                # 实盘环境，使用交易所API创建订单
+                ccxt_symbol = self.params['symbol'].replace('_', '/')
+                order = self.broker.exchange.create_order(
+                    symbol=ccxt_symbol,
+                    order_type='limit',
+                    side='buy',
+                    amount=buy_amount,
+                    price=buy_price
+                )
+                order_id = order['id']
+                log.info(f"动态买单下单成功: 价格={buy_price}, 数量={buy_amount}, 订单ID={order_id}")
+            except Exception as e:
+                log.error(f"动态买单下单失败: {str(e)}")
+                return
+        else:
+            # 回测环境，模拟订单创建
+            log.info(f"回测模式动态买单: 价格={buy_price}, 数量={buy_amount}, 订单ID={order_id}")
+            
+        # 记录订单
+        self.active_buy_orders[order_id] = {
+            'price': buy_price,
+            'amount': buy_amount,
+            'timestamp': int(time.time() * 1000),
+            'id': order_id,
+            'side': 'buy',
+            'status': 'open',
+            'dynamic': True  # 标记为动态订单
+        }
+        
+        # 记录最近一次交易信息
+        self.last_trade_time = time.time()
+        self.last_trade_price = buy_price
+        self.last_trade_side = 'buy'
+
+    async def _place_dynamic_sell_order(self) -> None:
+        """
+        动态卖单逻辑
+        
+        当价格突破网格上轨并回落时触发，动态计算卖单价格和数量
+        """
+        if not self.current_price:
+            return
+            
+        # 计算动态卖单价格（当前价格的小幅溢价）
+        sell_price = round_to_tick(self.current_price * 1.002, 10**(-self.price_precision))
+        
+        # 获取当前持仓量
+        position_size = await self.risk_manager.get_position_size()
+        if position_size <= 0:
+            log.warning("当前无持仓，取消卖单")
+            return
+            
+        # 计算卖单数量（基于持仓的一部分）
+        sell_ratio = 0.2  # 卖出持仓的20%
+        sell_amount = round_to_tick(
+            position_size * sell_ratio,
+            10**(-self.amount_precision)
+        )
+        
+        # 确保卖单数量不小于最小交易量也不大于持仓量
+        if sell_amount < 0.0001:  # 假设最小交易量是0.0001
+            sell_amount = min(0.0001, position_size)
+        if sell_amount > position_size:
+            sell_amount = position_size
+            
+        # 生成订单ID
+        order_id = f"dynamic_sell_{int(time.time() * 1000)}_{sell_price}"
+        
+        # 判断是否在回测环境中
+        if hasattr(self, 'broker') and hasattr(self.broker, 'exchange'):
+            try:
+                # 实盘环境，使用交易所API创建订单
+                ccxt_symbol = self.params['symbol'].replace('_', '/')
+                order = self.broker.exchange.create_order(
+                    symbol=ccxt_symbol,
+                    order_type='limit',
+                    side='sell',
+                    amount=sell_amount,
+                    price=sell_price
+                )
+                order_id = order['id']
+                log.info(f"动态卖单下单成功: 价格={sell_price}, 数量={sell_amount}, 订单ID={order_id}")
+            except Exception as e:
+                log.error(f"动态卖单下单失败: {str(e)}")
+                return
+        else:
+            # 回测环境，模拟订单创建
+            log.info(f"回测模式动态卖单: 价格={sell_price}, 数量={sell_amount}, 订单ID={order_id}")
+            
+        # 记录订单
+        self.active_sell_orders[order_id] = {
+            'price': sell_price,
+            'amount': sell_amount,
+            'timestamp': int(time.time() * 1000),
+            'id': order_id,
+            'side': 'sell',
+            'status': 'open',
+            'dynamic': True  # 标记为动态订单
+        }
+        
+        # 记录最近一次交易信息
+        self.last_trade_time = time.time()
+        self.last_trade_price = sell_price
+        self.last_trade_side = 'sell'
